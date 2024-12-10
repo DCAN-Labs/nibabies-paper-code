@@ -28,7 +28,8 @@ def setup_icc(pconn_path, output_fig_path):
 	print("ICC ABCDvsLTS Values: \n", "Mean:", flat_df["abcd_lts"].mean(), " \n STD:", flat_df["abcd_lts"].std())
 	print("ICC ABCDvs23.2 Values: \n", "Mean:", flat_df["abcd_new"].mean(), " \n STD:", flat_df["abcd_new"].std())
 	print("ICC 23.2vsLTS Values: \n", "Mean:", flat_df["new_lts"].mean(), " \n STD:", flat_df["new_lts"].std())
-	#plot_icc(flat_df, output_fig_path)
+	fig_vals = flat_df[["abcd_lts", "abcd_new"]]
+	plot_icc(fig_vals, output_fig_path)
 	
 def calc_icc(pipeline1, pipeline2):
 	# Grab ROI headers from one pconn created with header information
@@ -45,35 +46,27 @@ def calc_icc(pipeline1, pipeline2):
 	return flat_vals
 	
 def plot_icc(icc_vals, out_img):
+	# Reorganize data for plotting 
+	new = pd.DataFrame(icc_vals["abcd_new"])
+	old = pd.DataFrame(icc_vals["abcd_lts"])
+	new.columns=["ICC"]
+	old.columns=["ICC"]
+	new["Pipeline"] = "abcd_new"
+	old["Pipeline"] = "abcd_lts"
+	
+	# Combine into one df with ICC values and Pipeline columns
+	kde_vals = pd.concat([old,new],axis=0,ignore_index=True)
+	
 	# Create Plots
 	sns.set_context("paper",font_scale=4) 
-	fig, (ax1,ax2,ax3) = plt.subplots(3,1,figsize=(10,14))
-	sns.kdeplot(icc_vals["abcd_lts"],ax=ax1,linewidth=5,color="blue")
-	sns.kdeplot(icc_vals["abcd_new"],ax=ax2,linewidth=5,color="blue")
-	sns.kdeplot(icc_vals["new_lts"],ax=ax3,linewidth=5,color="blue")
+	fig,ax = plt.subplots(figsize=(15,10))
+	sns.kdeplot(kde_vals,x="ICC", hue="Pipeline",ax=ax,linewidth=5, fill=True)
 	
-	# Make consistent and clean up
-	axes = [ax1,ax2,ax3]
-	for ax in axes:
-		ax.set_xlim(0,1)
-		ax.set_ylim(0,20)
-		ax.set_yticks([])
-		# ax.legend_.remove() # AttributeError: 'NoneType' object has no attribute 'remove' since the dataframe structure is different maybe doesn't parse a legend to remove?
-		ax.set_xlabel('')
-		# Fill in line
-		line = ax.lines[0]
-		x = line.get_xydata()[:,0]
-		y = line.get_xydata()[:,1]
-		ax.fill_between(x,y,color="blue", alpha=0.3)
-	
-	ax1.set_xticks([])
-	ax2.set_xticks([])
-	
-	ax1.set_ylabel('')
-	ax2.set_ylabel('')
-	ax3.set_ylabel('')
-	
-	plt.tight_layout()
+	# Clean up Plots
+	ax.set_xlim(0,1)
+	ax.set_yticks([])
+	ax.set_xlabel('')
+
 	plt.savefig(out_img)
 	
 def plot_pearson(data, out_img):
@@ -112,7 +105,7 @@ def plot_pearson(data, out_img):
 	
 # Input CSV is 3 columns with flattened ICC values for each comparison
 icc_vals = pd.read_csv("/home/rando149/shared/projects/rae_testing/nibabies_work/SfN_results/ICC_figure/flat_icc_vals.csv")
-output_path = "/home/rando149/shared/projects/rae_testing/nibabies_work/SfN_results/ICC_figure/test_code_cleanup.png"
+output_path = "/home/rando149/shared/projects/rae_testing/nibabies_work/SfN_results/ICC_figure/combined_paper_figure.png"
 #plot_icc(icc_vals, output_path)
 pconn_path = "/home/rando149/shared/projects/rae_testing/nibabies_work/SfN_results/ABCD-BIDS/csv_pconns/cleaned_*"
 setup_icc(pconn_path,output_path)
