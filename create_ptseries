@@ -1,0 +1,24 @@
+#!/bin/bash -l
+# Pull dtseries from processed outputs then use workbench to convert to ptseries
+data_bucket=s3://nibabies-paper-data/fmriprep
+temp=/tmp/sfn
+output=/home/rando149/shared/projects/rae_testing/nibabies_work/SfN_results/fMRIprep-LTS
+subject_list=/home/rando149/shared/projects/rae_testing/nibabies_work/subject_list_ABCD.txt
+
+for n in {1..50}; do
+SUB=$(echo | sed -n ${n}p ${subject_list})
+
+# Pull dtseries for run 1 and 2 
+s3cmd sync ${data_bucket}/${SUB}/${SUB}/ses-baselineYear1Arm1/func/${SUB}_ses-baselineYear1Arm1_task-rest_run-1_space-fsLR_den-91k_bold.dtseries.nii ${temp}/ -v
+
+s3cmd sync ${data_bucket}/${SUB}/${SUB}/ses-baselineYear1Arm1/func/${SUB}_ses-baselineYear1Arm1_task-rest_run-2_space-fsLR_den-91k_bold.dtseries.nii ${temp}/ -v
+
+module load workbench/1.5.0
+
+wb_command -cifti-parcellate -legacy-mode ${temp}/${SUB}_ses-baselineYear1Arm1_task-rest_run-1_space-fsLR_den-91k_bold.dtseries.nii /home/faird/shared/code/internal/utilities/fconn_matrices_tools/parcel_gordon/Gordon_PD25.dlabel.nii COLUMN ${output}/${SUB}_ses-baselineYear1Arm1_task-rest_run-1_Atlas_Gordon_incl_subc.ptseries.nii
+
+wb_command -cifti-parcellate -legacy-mode ${temp}/${SUB}_ses-baselineYear1Arm1_task-rest_run-2_space-fsLR_den-91k_bold.dtseries.nii /home/faird/shared/code/internal/utilities/fconn_matrices_tools/parcel_gordon/Gordon_PD25.dlabel.nii COLUMN ${output}/${SUB}_ses-baselineYear1Arm1_task-rest_run-2_Atlas_Gordon_incl_subc.ptseries.nii
+
+rm ${temp}/${SUB}*dtseries.nii
+
+done
