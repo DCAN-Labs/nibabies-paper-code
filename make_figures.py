@@ -6,7 +6,7 @@ from pyrelimri import conn_icc
 from glob import glob
 
 
-def setup_icc(pconn_path, output_fig_path):
+def setup_icc(pconn_path, out_img):
 	# In order to guarantee paths are in the same order, glob one path then replace the pipeline with the other pipelines (assuming the path to the pconns have the same structure)
 	abcd_paths = glob(pconn_path)
 	abcd = {"ABCD": abcd_paths}
@@ -22,14 +22,14 @@ def setup_icc(pconn_path, output_fig_path):
 	abcd_lts_flat_vals = calc_icc(abcd_bids, fMRIprep_LTS)
 	new_lts_flat_vals = calc_icc(new_fMRIprep, fMRIprep_LTS)
 	
-	# Create new DF of flattened values to plot
+	# Create new DF of flattened values to plot and prnit out mean and SD values
 	flat_vals = {"abcd_lts": abcd_lts_flat_vals, "abcd_new": abcd_new_flat_vals, "new_lts":new_lts_flat_vals}
 	flat_df = pd.DataFrame(flat_vals)
 	print("ICC ABCDvsLTS Values: \n", "Mean:", flat_df["abcd_lts"].mean(), " \n STD:", flat_df["abcd_lts"].std())
 	print("ICC ABCDvs23.2 Values: \n", "Mean:", flat_df["abcd_new"].mean(), " \n STD:", flat_df["abcd_new"].std())
 	print("ICC 23.2vsLTS Values: \n", "Mean:", flat_df["new_lts"].mean(), " \n STD:", flat_df["new_lts"].std())
 	fig_vals = flat_df[["abcd_lts", "abcd_new"]]
-	plot_icc(fig_vals, output_fig_path)
+	plot_icc(fig_vals, out_img)
 	
 def calc_icc(pipeline1, pipeline2):
 	# Grab ROI headers from one pconn created with header information
@@ -70,49 +70,75 @@ def plot_icc(icc_vals, out_img):
 	plt.savefig(out_img)
 	
 def plot_pearson(data, out_img):
-	# Create Plots 
-	sns.set_context("paper",font_scale=4)
-	fig, (ax1,ax2,ax3) = plt.subplots(3,1,figsize=(10,14))
-	sns.kdeplot(data["abcd_lts"],ax=ax1,linewidth=5,color="blue")
-	sns.kdeplot(data["abcd_new"],ax=ax2,linewidth=5,color="blue")
-	sns.kdeplot(data["new_lts"],ax=ax3,linewidth=5,color="blue")
+	# Reorganize data for plotting 
+	new = pd.DataFrame(data["abcd_new"])
+	old = pd.DataFrame(data["abcd_lts"])
+	new.columns=["Corr"]
+	old.columns=["Corr"]
+	new["Pipeline"] = "abcd_new"
+	old["Pipeline"] = "abcd_lts"
 	
-	# Make consistent and clean up
-	axes = [ax1,ax2,ax3]
-	for ax in axes:
-		ax.set_xlim(0,1)
-		ax.set_ylim(0,20)
-		ax.set_yticks([])
-		ax.legend_.remove()
-		ax.set_xlabel('')
-		# Fill in line
-		line = ax.lines[0]
-		x = line.get_xydata()[:,0]
-		y = line.get_xydata()[:,1]
-		ax.fill_between(x,y,color="blue", alpha=0.3)
-		
+	# Combine into one df with ICC values and Pipeline columns
+	kde_vals = pd.concat([old,new],axis=0,ignore_index=True)
 	
-	ax1.set_xticks([])
-	ax2.set_xticks([])
+	# Create Plots
+	sns.set_context("paper",font_scale=4) 
+	fig,ax = plt.subplots(figsize=(15,10))
+	sns.kdeplot(kde_vals,x="Corr", hue="Pipeline",ax=ax,linewidth=5, fill=True)
 	
-	ax1.set_ylabel('')
-	ax2.set_ylabel('Distribution')
-	ax3.set_ylabel('')
-	
-	
-	plt.tight_layout()
+	# Clean up Plots
+	ax.set_xlim(0,1)
+	ax.set_yticks([])
+	ax.set_xlabel('')
+
 	plt.savefig(out_img)
 	
-# Input CSV is 3 columns with flattened ICC values for each comparison
-icc_vals = pd.read_csv("/home/rando149/shared/projects/rae_testing/nibabies_work/SfN_results/ICC_figure/flat_icc_vals.csv")
+def plot_qc_results(data, out_img):
+	# Split out results csv into the different QC metrics and melt for the correct data format
+	surface_qc = results[["Age group", "QC1 SR", "QC2 SR"]].melt(id_vars="Age group", var_name="Rater")
+	spatial_qc = results[["Age group", "QC1 SN", "QC2 SN"]].melt(id_vars="Age group", var_name="Rater")
+	dc_qc = results[["Age group", "QC1 DC", "QC2 DC"]].melt(id_vars="Age group", var_name="Rater")
+	alignment_qc = results[["Age group", "QC1 FA", "QC2 FA"]].melt(id_vars="Age group", var_name="Rater")
+
+	# Plot data 
+	fig,((ax1,ax2),(ax3,ax4)) = plt.subplots(figsize=(20,20), ncols=2,nrows=2, layout="constrained")
+	sns.despine(top=True,right=True)
+	sns.stripplot(data=surface_qc,x="Age group",y="value",hue="Rater", dodge=True, alpha=.7, ax=ax1)
+	sns.stripplot(data=spatial_qc,x="Age group",y="value",hue="Rater", dodge=True, alpha=.7, ax=ax2)
+	sns.stripplot(data=dc_qc,x="Age group",y="value",hue="Rater", dodge=True, alpha=.7, ax=ax3)
+	sns.stripplot(data=alignment_qc,x="Age group",y="value",hue="Rater", dodge=True, alpha=.7, ax=ax4)
+
+	# Clean up plots
+	for axis in [ax1,ax2,ax3,ax4]:
+		axis.set_xlabel("Age Range (mo)")
+		axis.set_ylabel("Rating")
+		axis.set_yticks([1,1.5,2,2.5,3])
+		axis.legend(title="Rater",labels=["Rater 1", "Rater 2"])
+		
+	ax1.set_title("Surface Reconstruction")
+	ax2.set_title("Spatial Normalization")
+	ax3.set_title("Distortion Correction")
+	ax4.set_title("Functional Alignment")
+	
+	plt.savefig(out_img)
+
+# Set paths for ICC calculations and plot
+# Input path is where pconn files live, it is assumed that each pipeline has the same format of path, where only the pipeline name is different
 output_path = "/home/rando149/shared/projects/rae_testing/nibabies_work/SfN_results/ICC_figure/combined_paper_figure.png"
-#plot_icc(icc_vals, output_path)
 pconn_path = "/home/rando149/shared/projects/rae_testing/nibabies_work/SfN_results/ABCD-BIDS/csv_pconns/cleaned_*"
 setup_icc(pconn_path,output_path)
 
+# Read in correlation csv, print out mean and SD values and plot
+# Input csv is 3 columns (abcd_lts,abcd_new,new_lts) with pearson values for each subject
 pearson_vals = pd.read_csv("/home/rando149/shared/projects/rae_testing/nibabies_work/SfN_results/all_pearson_correlations.csv")
 print("Corr ABCDvsLTS values: \n", "Mean:", pearson_vals["abcd_lts"].mean(), "SD:",pearson_vals["abcd_lts"].std())
 print("Corr ABCDvs23.2 values: \n", "Mean:", pearson_vals["abcd_new"].mean(), "SD:",pearson_vals["abcd_new"].std())
 print("Corr 23.2vsLTS values: \n", "Mean:", pearson_vals["new_lts"].mean(), "SD:",pearson_vals["new_lts"].std())
-pearson_output = "/home/rando149/shared/projects/rae_testing/nibabies_work/SfN_results/paper_pearson_distributions.png"
-#plot_pearson(pearson_vals,pearson_output)
+pearson_output = "/home/rando149/shared/projects/rae_testing/nibabies_work/SfN_results/new_paper_pearson_distributions.png"
+plot_pearson(pearson_vals,pearson_output)
+
+# Read in QC results csv and create plot
+# Input csv must at least have these columns: Age group, QC1 SR, QC2 SR, QC1 SN, QC2 SN, QC1 DC, QC2 DC, QC1 FA, QC2 FA
+qc_csv = pd.read_csv("/home/rando149/shared/projects/rae_testing/nibabies_work/Nibabies_QC_results.csv")
+qc_output = "/home/rando149/shared/projects/rae_testing/nibabies_work/paper_qc_plot.png"
+plot_qc_results(qc_csv, qc_output)
